@@ -1,5 +1,5 @@
-import type { EngineInterface, RenderInput } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import type { EngineInterface, RenderInput, UiBlitArgs } from 'claude-code'
+import { expect, mock, test } from 'claude-code/testing'
 
 import { FRASES, PASADOS, VERSOS } from '../hooks/cancionero'
 import { RETRATO_CHICO, RETRATO_GRANDE } from '../hooks/retrato'
@@ -104,6 +104,32 @@ test('la banda muestra el retrato grande, el chico si no cabe, y ninguno si la b
   expect((await retratoCon(40))?.props).toMatchObject({ rows: RETRATO_GRANDE.filas })
   expect((await retratoCon(10))?.props).toMatchObject({ rows: RETRATO_CHICO.filas })
   expect(await retratoCon(3)).toBeUndefined()
+})
+
+test('mientras Claude trabaja el Cacique canta: pasa por todos los cuadros de su canto; en silencio no se mueve', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, motor)
+  const reloj = mock.clock(on)
+  const cuadros: string[] = []
+  on('ui.blit', ($, e: UiBlitArgs) => {
+    if ('cells' in e && e.key === 'retrato') cuadros.push(e.cells)
+    return { value: {} }
+  })
+
+  const cantando = await $.ui.mount({ ...BANDA, props: { ...BANDA.props, maxRows: 40, isWorking: true } })
+  await reloj.advance(3000)
+
+  const distintos = new Set(RETRATO_GRANDE.canto)
+  expect(distintos.size).toBe(4)
+  for (const cuadro of distintos) expect(cuadros).toContain(cuadro)
+
+  await cantando.unmount()
+  const callado = await $.ui.mount({ ...BANDA, props: { ...BANDA.props, maxRows: 40 } })
+  await reloj.advance(0)
+  const alCallar = cuadros.length
+  await reloj.advance(1000)
+
+  expect(cuadros).toHaveLength(alCallar)
+  expect((await callado.find({ key: 'retrato' }))?.props).toMatchObject({ cells: RETRATO_GRANDE.celdas })
 })
 
 test('/cacique sale con el retrato al lado', async ($, on) => {

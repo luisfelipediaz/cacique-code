@@ -1,6 +1,6 @@
 {
   "name": "cacique-code",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Claude Code con alma vallenata: spinner, cierre de turno, banda y comando /cacique al estilo de Diomedes Díaz, el Cacique de La Junta.",
   "types": "./types/index.d.ts",
   "author": {

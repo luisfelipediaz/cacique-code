@@ -23,6 +23,24 @@ const ALTO_DEL_DIALOGO = 5
 
 const celdas = (r: Retrato) => ({ columns: r.columnas, rows: r.filas, cells: r.celdas })
 
+// Mientras Claude trabaja el retrato del globo canta: pasa por los cuadros de su canto a este compás
+const COMPAS_MS = 150
+let canto: { cancel: () => void } | undefined
+
+const callar = () => {
+  canto?.cancel()
+  canto = undefined
+}
+
+const cantar = ($: EngineInterface, requestId: string, r: Retrato) => {
+  callar()
+  let compas = 0
+  canto = $.clock.every(COMPAS_MS, () => {
+    compas = (compas + 1) % r.canto.length
+    $.ui.blit({ requestId, key: 'retrato', cells: r.canto[compas]! }).catch(callar)
+  })
+}
+
 const alAzar = <T,>(lista: readonly T[]): T => lista[Math.floor(Math.random() * lista.length)]!
 const otraFrase = (actual: number) => (actual + 1 + Math.floor(Math.random() * (FRASES.length - 1))) % FRASES.length
 
@@ -123,6 +141,7 @@ export const register: Register = (on, options) => {
   )
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    callar()
     if (e.props.hasSurvey || (await read($, isHidden))) {
       return next(e)
     }
@@ -159,6 +178,7 @@ export const register: Register = (on, options) => {
     const { Raster } = $.ui.resolve(e)
     // La punta va una fila bajo el borde superior del globo; sin pasarse del alto del retrato
     const bajada = Math.max(0, Math.min(retrato.boca - 1, retrato.filas - ALTO_DEL_DIALOGO))
+    if (e.props.isWorking) cantar($, e.requestId, retrato)
 
     return (
       <Box>

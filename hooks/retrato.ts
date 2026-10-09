@@ -5,7 +5,19 @@
 // Si el de arriba es transparente se usa «▄» con el de abajo como letra, para no pintar el color de letra de la terminal.
 
 // `boca`: la fila de celdas donde está la sonrisa, para que el globo de diálogo salga de ahí
-export type Retrato = { columnas: number; filas: number; boca: number; celdas: string }
+// `canto`: los cuadros de la animación en orden, uno por compás; el primero es `celdas`
+export type Retrato = { columnas: number; filas: number; boca: number; celdas: string; canto: readonly string[] }
+
+// Cómo se mueve la cara en cada cuadro: las filas de píxeles que cambian y si la cabeza sube un píxel
+type Gesto = 'media' | 'abierta' | 'parpadeo'
+type Cambio = { filas: Record<number, string>; sube?: boolean }
+
+// Canta dos frases y parpadea
+const COMPASES: readonly (Gesto | 'cerrada')[] = [
+  'cerrada', 'media', 'abierta', 'media',
+  'cerrada', 'media', 'abierta', 'media',
+  'parpadeo',
+]
 
 const TRANSPARENTE = 0x01000000
 
@@ -65,6 +77,24 @@ const GRANDE = [
   '..cCCCCCCCCCCCCgGCCCCCCCCccccc..',
 ]
 
+const GESTOS_GRANDE: Record<Gesto, Cambio> = {
+  media: { filas: { 20: '........sSSSmmmmmmmmSssq........' } },
+  abierta: {
+    filas: {
+      20: '........sSSSmmmmmmmmSssq........',
+      21: '........sSSSmmmmmmmmSssq........',
+      22: '.........sSSSSmmmmSSSsq.........',
+    },
+    sube: true,
+  },
+  parpadeo: {
+    filas: {
+      12: '......NMSSSSSSSSSSSSSsssMN......',
+      13: '......sMSSMMMMSSSSSEEsssMq......',
+    },
+  },
+}
+
 // 16 × 16 píxeles: el de la banda sobre el prompt
 const CHICO = [
   '....NNNNNNNN....',
@@ -109,9 +139,15 @@ const aBase64 = (bytes: Uint8Array) => {
   return texto
 }
 
+const GESTOS_CHICO: Record<Gesto, Cambio> = {
+  media: { filas: { 12: '....sSmmmmSsq...' } },
+  abierta: { filas: { 12: '....smmmmmmsq...' } },
+  parpadeo: { filas: { 6: '..sSMMSSSSSSSsq.' } },
+}
+
 const color = (fila: string | undefined, x: number) => PALETA[fila?.[x] ?? '.'] ?? TRANSPARENTE
 
-const pintar = (pixeles: readonly string[]): Retrato => {
+const codificar = (pixeles: readonly string[]) => {
   const columnas = pixeles[0]!.length
   const filas = Math.ceil(pixeles.length / 2)
   const palabras = new Uint32Array(columnas * filas * 3)
@@ -120,9 +156,27 @@ const pintar = (pixeles: readonly string[]): Retrato => {
       palabras.set(celda(color(pixeles[2 * y], x), color(pixeles[2 * y + 1], x)), (y * columnas + x) * 3)
     }
   }
-  const boca = Math.floor(pixeles.findIndex(fila => fila.includes('W')) / 2)
-  return { columnas, filas, boca, celdas: aBase64(new Uint8Array(palabras.buffer)) }
+  return { columnas, filas, celdas: aBase64(new Uint8Array(palabras.buffer)) }
 }
 
-export const RETRATO_GRANDE = pintar(GRANDE)
-export const RETRATO_CHICO = pintar(CHICO)
+// Al subir, la fila de arriba sale del cuadro y la de abajo se repite
+const gesticular = (pixeles: readonly string[], { filas, sube }: Cambio) => {
+  const cara = pixeles.map((fila, y) => filas[y] ?? fila)
+  return sube ? [...cara.slice(1), cara.at(-1)!] : cara
+}
+
+const pintar = (pixeles: readonly string[], gestos: Record<Gesto, Cambio>): Retrato => {
+  const quieto = codificar(pixeles)
+  const cuadros = { cerrada: quieto.celdas, media: '', abierta: '', parpadeo: '' }
+  for (const gesto of ['media', 'abierta', 'parpadeo'] as const) {
+    cuadros[gesto] = codificar(gesticular(pixeles, gestos[gesto])).celdas
+  }
+  return {
+    ...quieto,
+    boca: Math.floor(pixeles.findIndex(fila => fila.includes('W')) / 2),
+    canto: COMPASES.map(compas => cuadros[compas]),
+  }
+}
+
+export const RETRATO_GRANDE = pintar(GRANDE, GESTOS_GRANDE)
+export const RETRATO_CHICO = pintar(CHICO, GESTOS_CHICO)
