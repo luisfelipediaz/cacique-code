@@ -1,0 +1,23 @@
+{
+  "name": "cacique-code",
+  "version": "0.1.0",
+  "description": "Claude Code con alma vallenata: spinner, cierre de turno, banda y comando /cacique al estilo de Diomedes Díaz, el Cacique de La Junta.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Luis Felipe Díaz"
+  },
+  "userConfig": {
+    "parranda": {
+      "type": "boolean",
+      "title": "Modo parranda",
+      "description": "Claude saluda y se despide al estilo del Cacique (solo en la conversación, nunca en el código)",
+      "default": true
+    },
+    "sonidos": {
+      "type": "boolean",
+      "title": "Sonidos",
+      "description": "Tocar los audios de la carpeta sounds/ al iniciar, al terminar un turno y cuando falla un comando",
+      "default": true
+    }
+  }
+}

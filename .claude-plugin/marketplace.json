@@ -1,0 +1,13 @@
+{
+  "name": "cacique-code",
+  "description": "Claude Code con alma vallenata, en homenaje a Diomedes Díaz.",
+  "owner": {
+    "name": "Luis Felipe Díaz"
+  },
+  "plugins": [
+    {
+      "name": "cacique-code",
+      "source": "./"
+    }
+  ]
+}
