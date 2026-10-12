@@ -6,10 +6,18 @@
 
 // `boca`: la fila de celdas donde está la sonrisa, para que el globo de diálogo salga de ahí
 // `canto`: los cuadros de la animación en orden, uno por compás; el primero es `celdas`
-export type Retrato = { columnas: number; filas: number; boca: number; celdas: string; canto: readonly string[] }
+// `brillo`: los cuadros del destello del diamante cuando los tests o el build salen en verde
+export type Retrato = {
+  columnas: number
+  filas: number
+  boca: number
+  celdas: string
+  canto: readonly string[]
+  brillo: readonly string[]
+}
 
 // Cómo se mueve la cara en cada cuadro: las filas de píxeles que cambian y si la cabeza sube un píxel
-type Gesto = 'media' | 'abierta' | 'parpadeo'
+type Gesto = 'media' | 'abierta' | 'parpadeo' | 'brillo' | 'destello'
 type Cambio = { filas: Record<number, string>; sube?: boolean }
 
 // Canta dos frases y parpadea
@@ -18,6 +26,9 @@ const COMPASES: readonly (Gesto | 'cerrada')[] = [
   'cerrada', 'media', 'abierta', 'media',
   'parpadeo',
 ]
+
+// El diamante destella tres veces
+const BRILLO: readonly Gesto[] = ['brillo', 'destello', 'brillo', 'destello', 'brillo']
 
 const TRANSPARENTE = 0x01000000
 
@@ -34,6 +45,8 @@ const PALETA: Record<string, number> = {
   w: 0xede6da, // blanco del ojo derecho
   W: 0xffffff, // dientes
   D: 0x7fe6ff, // el diamante
+  B: 0xe8fdff, // el diamante cuando brilla
+  '*': 0xfff6c2, // el destello
   m: 0x5a2219, // boca
   G: 0xe6b83e, // cadena de oro
   g: 0x9c761b, // oro en sombra
@@ -93,6 +106,20 @@ const GESTOS_GRANDE: Record<Gesto, Cambio> = {
       13: '......sMSSMMMMSSSSSEEsssMq......',
     },
   },
+  brillo: {
+    filas: {
+      18: '.......sSSSMMMM*MMMMMsssq.......',
+      19: '.......sSSMMWWWBWWWWMMssq.......',
+    },
+  },
+  destello: {
+    filas: {
+      17: '......ssLLSSMMM*MMMMSsssqq......',
+      18: '.......sSSSMMM***MMMMsssq.......',
+      19: '.......sSSMMWWWBWWWWMMssq.......',
+      20: '........sSSSsmm*mmmsSssq........',
+    },
+  },
 }
 
 // 16 × 16 píxeles: el de la banda sobre el prompt
@@ -143,6 +170,8 @@ const GESTOS_CHICO: Record<Gesto, Cambio> = {
   media: { filas: { 12: '....sSmmmmSsq...' } },
   abierta: { filas: { 12: '....smmmmmmsq...' } },
   parpadeo: { filas: { 6: '..sSMMSSSSSSSsq.' } },
+  brillo: { filas: { 9: '..sSMMM*MMMMSsq.', 10: '..sMMWWBWWWWMMq.' } },
+  destello: { filas: { 9: '..sSMM***MMMSsq.', 10: '..sMMWWBWWWWMMq.', 11: '...sSmm*mmmSsq..' } },
 }
 
 const color = (fila: string | undefined, x: number) => PALETA[fila?.[x] ?? '.'] ?? TRANSPARENTE
@@ -167,14 +196,13 @@ const gesticular = (pixeles: readonly string[], { filas, sube }: Cambio) => {
 
 const pintar = (pixeles: readonly string[], gestos: Record<Gesto, Cambio>): Retrato => {
   const quieto = codificar(pixeles)
-  const cuadros = { cerrada: quieto.celdas, media: '', abierta: '', parpadeo: '' }
-  for (const gesto of ['media', 'abierta', 'parpadeo'] as const) {
-    cuadros[gesto] = codificar(gesticular(pixeles, gestos[gesto])).celdas
-  }
+  const cuadro = (gesto: Gesto | 'cerrada') =>
+    gesto === 'cerrada' ? quieto.celdas : codificar(gesticular(pixeles, gestos[gesto])).celdas
   return {
     ...quieto,
     boca: Math.floor(pixeles.findIndex(fila => fila.includes('W')) / 2),
-    canto: COMPASES.map(compas => cuadros[compas]),
+    canto: COMPASES.map(cuadro),
+    brillo: BRILLO.map(cuadro),
   }
 }
 

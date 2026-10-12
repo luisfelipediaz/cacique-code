@@ -1,9 +1,12 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, RenderPropsOf } from 'claude-code'
 
+import { ANUNCIOS, diaDelCacique } from './calendario'
+import type { Dia } from './calendario'
 import { FRASES, PASADOS, PERSONALIDAD, SALUDOS, VERSOS } from './cancionero'
 import { RETRATO_CHICO, RETRATO_GRANDE } from './retrato'
 import type { Retrato } from './retrato'
+import { nombreDelRepo, saludoGrabado } from './saludo'
 
 const COMANDO = 'cacique'
 const ESTADO = '🪗 Cacique Code · desde La Junta pa’l mundo'
@@ -23,22 +26,62 @@ const ALTO_DEL_DIALOGO = 5
 
 const celdas = (r: Retrato) => ({ columns: r.columnas, rows: r.filas, cells: r.celdas })
 
-// Mientras Claude trabaja el retrato del globo canta: pasa por los cuadros de su canto a este compás
-const COMPAS_MS = 150
+// Un turno que dura al menos esto avisa al terminar, por si el usuario se fue a otra ventana
+const AVISO_MS = 30_000
+
+// Los comandos que, si salen bien, hacen brillar el diamante
+const ES_VERDE = /\b(test|tests|jest|vitest|pytest|mocha|rspec|build|tsc|lint|check)\b/
+
+// El día de hoy en el calendario del Cacique: en su homenaje no hay parranda, canto ni sonidos
+let dia: Dia = 'corriente'
+
+// Mientras Claude trabaja el retrato del globo canta, al aire de lo que esté haciendo:
+// son (lento) cuando piensa, paseo cuando escribe, merengue cuando arma una herramienta, puya (rápido) cuando la corre
+type Aire = 'son' | 'paseo' | 'merengue' | 'puya'
+const AIRES: Record<RenderPropsOf['Spinner']['mode'], Aire> = {
+  thinking: 'son',
+  requesting: 'paseo',
+  responding: 'paseo',
+  'tool-input': 'merengue',
+  'tool-use': 'puya',
+}
+const COMPAS_MS: Record<Aire, number> = { son: 260, paseo: 170, merengue: 120, puya: 80 }
+let aire: Aire = 'paseo'
+
 let canto: { cancel: () => void } | undefined
+// El retrato que hay en el globo y los cuadros del brillo que faltan por mostrar
+let retratoEnElGlobo: Retrato | undefined
+let brillos: string[] = []
 
 const callar = () => {
   canto?.cancel()
   canto = undefined
 }
 
+// Cada compás espera según el aire del momento; un brillo pendiente pasa por delante del canto
 const cantar = ($: EngineInterface, requestId: string, r: Retrato) => {
   callar()
   let compas = 0
-  canto = $.clock.every(COMPAS_MS, () => {
+  const paso = () => {
     compas = (compas + 1) % r.canto.length
-    $.ui.blit({ requestId, key: 'retrato', cells: r.canto[compas]! }).catch(callar)
-  })
+    $.ui.blit({ requestId, key: 'retrato', cells: brillos.shift() ?? r.canto[compas]! }).catch(callar)
+    canto = $.clock.after(COMPAS_MS[aire], paso)
+  }
+  canto = $.clock.after(COMPAS_MS[aire], paso)
+}
+
+const brillar = () => {
+  brillos = [...(retratoEnElGlobo?.brillo ?? [])]
+}
+
+// El saludo grabado con el nombre de git y el repo; sin nombre, uno de sus saludos
+async function saludar($: EngineInterface) {
+  const [git, repo] = await Promise.all([
+    $.process.run(['git', 'config', 'user.name']).catch(() => undefined),
+    $.session.repo().catch(() => null),
+  ])
+  const nombre = git?.exitCode === 0 ? git.stdout : ''
+  return saludoGrabado(nombre, repo ? nombreDelRepo(repo.root) : undefined) ?? `¡${alAzar(SALUDOS)}!`
 }
 
 const alAzar = <T,>(lista: readonly T[]): T => lista[Math.floor(Math.random() * lista.length)]!
@@ -58,7 +101,7 @@ const RESPUESTAS: Record<string, () => string> = {
 // Toca un audio de sounds/ cuyo nombre empiece por el momento (inicio-*.mp3, fin-*.mp3, error-*.mp3);
 // '' elige entre todos. Sin archivos, o con los sonidos apagados, no suena nada.
 async function sonar($: EngineInterface, options: PluginOptions, momento: Momento) {
-  if (options.sonidos === false) return
+  if (options.sonidos === false || dia === 'homenaje') return
   try {
     const audios = (await $.fs.list(`${$.plugin.root}/${SONIDOS}`)).filter(
       f => f.kind === 'file' && ES_AUDIO.test(f.name) && f.name.startsWith(momento),
@@ -77,7 +120,9 @@ export const register: Register = (on, options) => {
       argumentHint: '[frases|saludo|sonar]',
     })
     $.ui.status(ESTADO)
-    $.ui.toast(`¡${alAzar(SALUDOS)}!`)
+    const hoy = new Date(await $.clock.now())
+    dia = diaDelCacique(hoy)
+    $.ui.toast(dia === 'corriente' ? await saludar($) : ANUNCIOS[dia](hoy.getFullYear()), { timeoutMs: 8000 })
     void sonar($, options, 'inicio')
 
     return next(e)
@@ -108,7 +153,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.compose', async ($, e, next) => {
     const compuesto = await next(e)
-    if (options.parranda === false) return compuesto
+    if (options.parranda === false || dia === 'homenaje') return compuesto
 
     return {
       sections: [...compuesto.sections, { id: 'cacique-code:personalidad', text: PERSONALIDAD, scope: 'session' }],
@@ -117,6 +162,11 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     void sonar($, options, 'fin')
+    const isLarga = e.agentId === undefined && !e.isAborted && e.durationMs >= AVISO_MS
+    if (options.avisos !== false && isLarga) {
+      const segundos = Math.round(e.durationMs / 1000)
+      void $.ui.notify(`${alAzar(PASADOS)} ${segundos} s. ¡Terminó la parranda!`, { title: 'Cacique Code' }).catch(() => undefined)
+    }
 
     return next(e)
   })
@@ -128,9 +178,10 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Spinner' }, async ($, e, next) =>
-    next({ ...e, props: { ...e.props, word: await read($, verso) } }),
-  )
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    aire = AIRES[e.props.mode]
+    return next({ ...e, props: { ...e.props, word: await read($, verso), suffix: `… a ritmo de ${aire}` } })
+  })
 
   on('ui.render', { component: 'TurnDuration' }, ($, e, next) =>
     next({ ...e, props: { ...e.props, word: PASADOS[e.props.durationMs % PASADOS.length]! } }),
@@ -142,6 +193,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     callar()
+    retratoEnElGlobo = undefined
     if (e.props.hasSurvey || (await read($, isHidden))) {
       return next(e)
     }
@@ -178,7 +230,8 @@ export const register: Register = (on, options) => {
     const { Raster } = $.ui.resolve(e)
     // La punta va una fila bajo el borde superior del globo; sin pasarse del alto del retrato
     const bajada = Math.max(0, Math.min(retrato.boca - 1, retrato.filas - ALTO_DEL_DIALOGO))
-    if (e.props.isWorking) cantar($, e.requestId, retrato)
+    retratoEnElGlobo = retrato
+    if (e.props.isWorking && dia !== 'homenaje') cantar($, e.requestId, retrato)
 
     return (
       <Box>
@@ -194,6 +247,7 @@ export const register: Register = (on, options) => {
 
     $.ui.status(isDesafinado ? '🪗 Se desafinó el acordeón: el comando falló' : ESTADO)
     if (isDesafinado) void sonar($, options, 'error')
+    if (ran.deny === undefined && ran.isError !== true && ES_VERDE.test(e.command)) brillar()
 
     return ran
   })
