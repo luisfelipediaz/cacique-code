@@ -4,6 +4,7 @@ import type { EngineInterface, PluginOptions, Register, RenderPropsOf } from 'cl
 import { ANUNCIOS, diaDelCacique } from './calendario'
 import type { Dia } from './calendario'
 import { FRASES, PASADOS, PERSONALIDAD, SALUDOS, VERSOS } from './cancionero'
+import { citar, frasesSobre, HERRAMIENTA } from './cita'
 import { RETRATO_CHICO, RETRATO_GRANDE } from './retrato'
 import type { Retrato } from './retrato'
 import { nombreDelRepo, saludoGrabado } from './saludo'
@@ -119,6 +120,7 @@ export const register: Register = (on, options) => {
       description: 'Una frase del Cacique de La Junta (args: frases | saludo | sonar)',
       argumentHint: '[frases|saludo|sonar]',
     })
+    if (options.parranda !== false) await $.tool.register(HERRAMIENTA)
     $.ui.status(ESTADO)
     const hoy = new Date(await $.clock.now())
     dia = diaDelCacique(hoy)
@@ -134,6 +136,12 @@ export const register: Register = (on, options) => {
     if (pedido === 'sonar') void sonar($, options, '')
 
     return { text: responder() }
+  })
+
+  // La herramienta es del mod, así que los tipos no la conocen: se empareja por nombre y se lee su tema suelto
+  on('tool.call', { tool: new RegExp(`^mcp__cacique-code__${HERRAMIENTA.name}$`) }, async ($, e) => {
+    const { tema } = e as { tema?: unknown }
+    return { result: citar(alAzar(frasesSobre(typeof tema === 'string' ? tema : undefined))) }
   })
 
   on('ui.render', { component: 'CommandOutput', props: { command: COMANDO } }, ($, e, next) => {
@@ -216,8 +224,9 @@ export const register: Register = (on, options) => {
         </Box>
         <Text dimColor>  — Diomedes Díaz, {contexto}</Text>
         <Box>
-          <Button key="otra" label="Otra" onPress={() => update($, frase, otraFrase)} />
-          <Button key="ocultar" label="Ocultar" onPress={() => update($, isHidden, () => true)} />
+          <Button key="otra" label="Otra" hotkey="o" plain onPress={() => update($, frase, otraFrase)} />
+          <Text>  </Text>
+          <Button key="ocultar" label="Ocultar" hotkey="c" plain onPress={() => update($, isHidden, () => true)} />
         </Box>
       </Box>
     )

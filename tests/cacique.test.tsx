@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { FRASES, PASADOS, SALUDOS, VERSOS } from '../hooks/cancionero'
+import { citar } from '../hooks/cita'
 import { RETRATO_CHICO, RETRATO_GRANDE } from '../hooks/retrato'
 
 // Lo que el motor dibujaría debajo del mod
@@ -196,6 +197,11 @@ const abrirSesion = async ($: Engine, on: On, fecha: Date, nombre = 'Luis Felipe
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.status', () => ({ value: undefined }))
+  const herramientas: string[] = []
+  on('tool.register', ($, e) => {
+    herramientas.push(e.name)
+    return { value: { tool: `mcp__cacique-code__${e.name}` } }
+  })
   on('process.run', () => ({ value: { exitCode: 0, stdout: nombre, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('session.repo', () => ({ value: { root: '/repos/cacique-code', remote: null, internal: false, name: null } }))
   const toasts: string[] = []
@@ -204,7 +210,7 @@ const abrirSesion = async ($: Engine, on: On, fecha: Date, nombre = 'Luis Felipe
     return { value: undefined }
   })
   await $.session.start(INICIO)
-  return { toasts, reloj }
+  return { toasts, reloj, herramientas }
 }
 
 const DIA_CORRIENTE = new Date(2026, 9, 9, 10)
@@ -334,4 +340,34 @@ test('si los tests fallan el diamante no brilla', async ($, on) => {
 test('un comando que no es de tests ni build no hace brillar el diamante', async ($, on) => {
   const cuadros = await cuadrosTrasBash($, on, 'ls -la', false)
   expect(cuadros).not.toContain(RETRATO_GRANDE.brillo[0])
+})
+
+test('con el modo parranda el modelo tiene la herramienta frase_del_cacique', async ($, on) => {
+  expect((await abrirSesion($, on, DIA_CORRIENTE)).herramientas).toEqual(['frase_del_cacique'])
+})
+
+test('sin modo parranda no registra la herramienta', { options: { parranda: false } }, async ($, on) => {
+  expect((await abrirSesion($, on, DIA_CORRIENTE)).herramientas).toEqual([])
+})
+
+const pedirFrase = async ($: Engine, tema?: string) => {
+  // La herramienta es del mod y los tipos no la conocen
+  const ran = await $.tool.call({ tool: 'mcp__cacique-code__frase_del_cacique', ...(tema ? { tema } : {}) } as never)
+  return ran.result
+}
+
+test('la herramienta cita del cancionero, con su contexto y su fuente', async $ => {
+  expect(FRASES.map(citar)).toContain(await pedirFrase($))
+})
+
+test('con tema, la herramienta elige un dicho que habla de eso', async $ => {
+  const cita = await pedirFrase($, 'el whisky')
+  expect(cita).toBe(citar(FRASES.find(f => f.texto.includes('whisky'))!))
+})
+
+test('Otra y Ocultar tienen tecla: o y c', async ($, on) => {
+  on('ui.render', { component: 'AbovePrompt' }, motor)
+  const ui = await $.ui.mount(BANDA)
+  expect((await ui.find({ key: 'otra' }))?.props).toMatchObject({ hotkey: 'o' })
+  expect((await ui.find({ key: 'ocultar' }))?.props).toMatchObject({ hotkey: 'c' })
 })

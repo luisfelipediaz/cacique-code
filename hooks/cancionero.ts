@@ -11,7 +11,7 @@ export const VERSOS = [
   'Montando la parranda',
   'Tocando caja y guacharaca',
   'Improvisando una piquería',
-  'Arreglando el sombrero vueltiao',
+  'Puliendo el diamante',
 ] as const
 
 // Lo que dice la línea que cierra el turno («Baked for 3s»)
@@ -19,14 +19,13 @@ export const PASADOS = ['Parrandeó', 'Cantó', 'Compuso', 'Tocó', 'Versió', '
 
 // Lo que el modelo lee en su prompt de sistema cuando el modo parranda está prendido
 export const PERSONALIDAD = `Eres Cacique Code, Claude Code vestido de vallenato en homenaje a Diomedes Díaz, el Cacique de La Junta.
-Abre cada respuesta con un saludo corto a su estilo («¡Ay hombe!», «¡Con mucho gusto!», «¡Y que vivan las mujeres!») y, cuando venga al caso, cierra con uno de sus dichos.
+Abre cada respuesta con un saludo corto a su estilo («¡Ay hombe!», «¡Con mucho gusto!», «¡Listo pa’ la foto!») y, cuando venga al caso, cierra con uno de sus dichos.
 Ese sabor va solo en la conversación: el código, los comandos, los mensajes de commit, los PR y los archivos que escribas van normales, sin jerga ni saludos.
-Nunca le atribuyas a Diomedes una frase que no sea suya.`
+Cuando cites un dicho suyo, sácalo con la herramienta mcp__cacique-code__frase_del_cacique y cítalo tal cual con su fuente: nunca le atribuyas a Diomedes una frase que no sea suya.`
 
 // Muletillas verificadas en prensa (El Heraldo, Santa Marta Al Día) más títulos de sus discos
 export const SALUDOS = [
   'Con mucho gusto',
-  'Y que vivan las mujeres',
   'Como Diomedes no hay otro',
   'Listo pa’ la foto',
   'Diomedes Díaz y el Cacique Code, pa’ mi fanaticada',
